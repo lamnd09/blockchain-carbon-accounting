@@ -6,8 +6,6 @@ export PATH=${PWD}/bin:$PATH
 export FABRIC_CFG_PATH=${PWD}/configtx
 export VERBOSE=false
 
-echo $PATH
-
 # Print the usage message
 function printHelp() {
   echo "Usage: "
@@ -19,6 +17,7 @@ function printHelp() {
   echo "      "$'\e[0;32m'deployCC$'\e[0m' - deploy the asset transfer basic chaincode on the channel or specify
   echo "      "$'\e[0;32m'down$'\e[0m' - clear the network with docker-compose down
   echo "      "$'\e[0;32m'restart$'\e[0m' - restart the network
+  echo "      "$'\e[0;32m'resetAllData$'\e[0m' - removes wallets and fabric-ca-server.db for all auditors
   echo
   echo "    Flags:"
   echo "    Used with "$'\e[0;32m'network.sh up$'\e[0m', $'\e[0;32m'network.sh createChannel$'\e[0m':
@@ -33,7 +32,7 @@ function printHelp() {
   echo "    Used with "$'\e[0;32m'network.sh deployCC$'\e[0m'
   echo "    -c <channel name> - deploy chaincode to channel"
   echo "    -ccn <name> - the short name of the chaincode to deploy: basic (default),ledger, private, secured"
-  echo "    -ccl <language> - the programming language of the chaincode to deploy: go (default), java, javascript, typescript"
+  echo "    -ccl <language> - the programming language of the chaincode to deploy: go, java, javascript (default), typescript"
   echo "    -ccv <version>  - chaincode version. 1.0 (default)"
   echo "    -ccs <sequence>  - chaincode definition sequence. Must be an integer, 1 (default), 2, 3, etc"
   echo "    -ccp <path>  - Optional, path to the chaincode. When provided the -ccn will be used as the deployed name and not the short name of the known chaincodes."
@@ -48,6 +47,8 @@ function printHelp() {
   echo "   "$'\e[0;32m'up createChannel$'\e[0m' -ca -c -r -d -s -i -verbose
   echo "   "$'\e[0;32m'createChannel$'\e[0m' -c -r -d -verbose
   echo "   "$'\e[0;32m'deployCC$'\e[0m' -ccn -ccl -ccv -ccs -ccp -cci -r -d -verbose
+  echo "   "$'\e[0;32m'startBlockchainExplorer$'\e[0m'
+  echo "   "$'\e[0;32m'stopBlockchainExplorer$'\e[0m'
   echo
   echo " Taking all defaults:"
   echo "   network.sh up"
@@ -57,6 +58,8 @@ function printHelp() {
   echo "   network.sh createChannel -c channelName"
   echo "   network.sh deployCC -ccn basic -ccl javascript"
   echo "   network.sh deployCC -ccn mychaincode -ccp ./user/mychaincode -ccv 1 -ccl javascript"
+  echo "   network.sh startBlockchainExplorer"
+  echo "   network.sh down"
 }
 
 # Obtain CONTAINER_IDS and remove them
@@ -91,7 +94,7 @@ NONWORKING_VERSIONS="^1\.0\. ^1\.1\. ^1\.2\. ^1\.3\. ^1\.4\."
 # of go or other items could be added.
 function checkPrereqs() {
   ## Check if your have cloned the peer binaries and configuration files.
-  peer version > /dev/null 2>&1
+  peer version >/dev/null 2>&1
 
   if [[ $? -ne 0 || ! -d "./config" ]]; then
     echo "ERROR! Peer binary and configuration files not found.."
@@ -132,7 +135,7 @@ function checkPrereqs() {
   ## Check for fabric-ca
   if [ "$CRYPTO" == "Certificate Authorities" ]; then
 
-    fabric-ca-client version > /dev/null 2>&1
+    fabric-ca-client version >/dev/null 2>&1
     if [[ $? -ne 0 ]]; then
       echo "ERROR! fabric-ca-client binary not found.."
       echo
@@ -153,7 +156,6 @@ function checkPrereqs() {
     fi
   fi
 }
-
 
 # Before you can bring up a network, each organization needs to generate the crypto
 # material that will define that organization on the network. Because Hyperledger
@@ -252,7 +254,7 @@ function createOrgs() {
 
     . organizations/fabric-ca/registerEnroll.sh
 
-    sleep 10
+    sleep 5
 
     echo "##########################################################"
     echo "############ Create Auditor1 Identities ##################"
@@ -265,7 +267,6 @@ function createOrgs() {
     echo "##########################################################"
 
     createAuditor2
-    
 
     echo "##########################################################"
     echo "############ Create Auditor3 Identities ##################"
@@ -277,7 +278,7 @@ function createOrgs() {
 
   # echo
   # echo "Generate CCP files for Org1 and Org2"
-  # ./organizations/ccp-generate.sh
+  ./organizations/ccp-generate.sh
 }
 
 # Once you create the organization crypto material, you need to create the
@@ -363,7 +364,7 @@ function networkUp() {
 ## call the script to join create the channel and join the peers of org1 and org2
 function createChannel() {
 
-## Bring up the network if it is not arleady up.
+  ## Bring up the network if it is not arleady up.
 
   if [ ! -d "organizations/peerOrganizations" ]; then
     echo "Bringing up network"
@@ -376,14 +377,13 @@ function createChannel() {
   # more to create the channel creation transaction and the anchor peer updates.
   # configtx.yaml is mounted in the cli container, which allows us to use it to
   # create the channel artifacts
- scripts/createChannel.sh $CHANNEL_NAME $CLI_DELAY $MAX_RETRY $VERBOSE
+  scripts/createChannel.sh $CHANNEL_NAME $CLI_DELAY $MAX_RETRY $VERBOSE
   if [ $? -ne 0 ]; then
     echo "Error !!! Create channel failed"
     exit 1
   fi
 
 }
-
 
 ## Call the script to isntall and instantiate a chaincode on the channel
 function deployCC() {
@@ -398,11 +398,44 @@ function deployCC() {
   exit 0
 }
 
+## Start blockchain explorer
+function startBlockchainExplorer() {
+
+  COMPOSE_FILES="-f ${COMPOSE_FILE_BLOCKCHAIN_EXPLORER}"
+  docker-compose ${COMPOSE_FILES} up -d 2>&1
+
+  docker ps -a
+  if [ $? -ne 0 ]; then
+    echo "ERROR !!!! Unable to start blockchain explorer"
+    exit 1
+  fi
+
+  echo
+	echo "===================== Blockchain Explorer started ===================== "
+  echo " URL: http://localhost:8080/"
+  echo " Username: exploreradmin"
+  echo " Password: exploreradminpw"
+	echo 
+}
+
+## Stop blockchain explorer and remove docker container
+function stopBlockchainExplorer() {
+
+  COMPOSE_FILES="-f ${COMPOSE_FILE_BLOCKCHAIN_EXPLORER}"
+  docker-compose ${COMPOSE_FILES} down 2>&1
+
+  docker ps -a
+
+  echo
+	echo "===================== Blockchain Explorer stopped ===================== "
+	echo 
+}
+
 
 # Tear down running network
 function networkDown() {
   # stop org3 containers also in addition to org1 and org2, in case we were running sample to add org3
-  docker-compose -f $COMPOSE_FILE_BASE -f $COMPOSE_FILE_COUCH -f $COMPOSE_FILE_CA down --volumes --remove-orphans
+  docker-compose -f $COMPOSE_FILE_BASE -f $COMPOSE_FILE_COUCH -f $COMPOSE_FILE_CA -f $COMPOSE_FILE_BLOCKCHAIN_EXPLORER down --volumes --remove-orphans
   # docker-compose -f $COMPOSE_FILE_COUCH_ORG3 -f $COMPOSE_FILE_ORG3 down --volumes --remove-orphans
   # Don't remove the generated artifacts -- note, the ledgers are always removed
   if [ "$MODE" != "restart" ]; then
@@ -418,7 +451,8 @@ function networkDown() {
     rm -rf organizations/fabric-ca/org2/msp organizations/fabric-ca/org2/tls-cert.pem organizations/fabric-ca/org2/ca-cert.pem organizations/fabric-ca/org2/IssuerPublicKey organizations/fabric-ca/org2/IssuerRevocationPublicKey organizations/fabric-ca/org2/fabric-ca-server.db
     rm -rf organizations/fabric-ca/ordererOrg/msp organizations/fabric-ca/ordererOrg/tls-cert.pem organizations/fabric-ca/ordererOrg/ca-cert.pem organizations/fabric-ca/ordererOrg/IssuerPublicKey organizations/fabric-ca/ordererOrg/IssuerRevocationPublicKey organizations/fabric-ca/ordererOrg/fabric-ca-server.db
     rm -rf addOrg3/fabric-ca/org3/msp addOrg3/fabric-ca/org3/tls-cert.pem addOrg3/fabric-ca/org3/ca-cert.pem addOrg3/fabric-ca/org3/IssuerPublicKey addOrg3/fabric-ca/org3/IssuerRevocationPublicKey addOrg3/fabric-ca/org3/fabric-ca-server.db
-
+    rm emissionscontract.tar.gz
+    rm -rf system-genesis-block
 
     # remove channel and script artifacts
     rm -rf channel-artifacts log.txt fabcar.tar.gz fabcar
@@ -426,20 +460,43 @@ function networkDown() {
   fi
 }
 
+function resetWallets() {
+  if [[ -d ${WALLET_PATH} ]]; then
+    rm -r ${WALLET_PATH}
+    echo "Removed wallets at ${WALLET_PATH}"
+  else
+    echo "Wallets at ${WALLET_PATH} do not exist, skipping."
+  fi
+}
+
+function resetFabricCaServerDb() {
+  all_auditors=("auditor1" "auditor2" "auditor3")
+  for auditor in ${all_auditors[@]}; do
+    db_to_remove="./organizations/fabric-ca/$auditor/fabric-ca-server.db"
+    if [[ -f "$db_to_remove" ]]; then
+      rm ${db_to_remove}
+      echo "Removed fabric-ca-server.db for $auditor"
+    else
+      echo "db for $auditor does not exist, skipping."
+    fi
+  done
+  echo "Finished removing all fabric-ca-server dbs."
+}
+
 # Obtain the OS and Architecture string that will be used to select the correct
 # native binaries for your platform, e.g., darwin-amd64 or linux-amd64
 OS_ARCH=$(echo "$(uname -s | tr '[:upper:]' '[:lower:]' | sed 's/mingw64_nt.*/windows/')-$(uname -m | sed 's/x86_64/amd64/g')" | awk '{print tolower($0)}')
 # Using crpto vs CA. default is cryptogen
-CRYPTO="cryptogen"
+CRYPTO="Certificate Authorities"
 # timeout duration - the duration the CLI should wait for a response from
 # another container before giving up
 MAX_RETRY=5
 # default for delay between commands
 CLI_DELAY=3
 # channel name defaults to "mychannel"
-CHANNEL_NAME="mychannel"
+CHANNEL_NAME="utilityemissionchannel"
 # chaincode name defaults to "basic"
-CC_NAME="basic"
+CC_NAME="emissionscontract"
 # chaincode path defaults to "NA"
 CC_SRC_PATH="NA"
 # endorsement policy defaults to "NA". This would allow chaincodes to use the majority default policy.
@@ -454,28 +511,32 @@ COMPOSE_FILE_BASE=docker/docker-compose-carbonAccounting.yaml
 COMPOSE_FILE_COUCH=docker/docker-compose-couch.yaml
 # certificate authorities compose file
 COMPOSE_FILE_CA=docker/docker-compose-ca.yaml
+# blockchain-explorer compose file
+COMPOSE_FILE_BLOCKCHAIN_EXPLORER=docker/docker-compose-blockchain-explorer.yaml
 # use this as the docker compose couch file for org3
 # COMPOSE_FILE_COUCH_ORG3=addOrg3/docker/docker-compose-couch-org3.yaml
 # # use this as the default docker-compose yaml definition for org3
 # COMPOSE_FILE_ORG3=addOrg3/docker/docker-compose-org3.yaml
 #
 # use go as the default language for chaincode
-CC_SRC_LANGUAGE="go"
+CC_SRC_LANGUAGE="javascript"
 # Chaincode version
 CC_VERSION="1.0"
 # Chaincode definition sequence
 CC_SEQUENCE=1
 # default image tag
-IMAGETAG="latest"
+IMAGETAG="2.2.1"
 # default ca image tag
-CA_IMAGETAG="latest"
+CA_IMAGETAG="1.4.9"
 # default database
-DATABASE="leveldb"
+DATABASE="couchdb"
+# Path to wallets
+WALLET_PATH="../typescript_app/dist/typescript_app/src/blockchain-gateway/wallets"
 
 # Parse commandline args
 
 ## Parse mode
-if [[ $# -lt 1 ]] ; then
+if [[ $# -lt 1 ]]; then
   printHelp
   exit 0
 else
@@ -484,87 +545,87 @@ else
 fi
 
 # parse a createChannel subcommand if used
-if [[ $# -ge 1 ]] ; then
+if [[ $# -ge 1 ]]; then
   key="$1"
   if [[ "$key" == "createChannel" ]]; then
-      export MODE="createChannel"
-      shift
+    export MODE="createChannel"
+    shift
   fi
 fi
 
 # parse flags
 
-while [[ $# -ge 1 ]] ; do
+while [[ $# -ge 1 ]]; do
   key="$1"
   case $key in
-  -h )
+  -h)
     printHelp
     exit 0
     ;;
-  -c )
+  -c)
     CHANNEL_NAME="$2"
     shift
     ;;
-  -ca )
+  -ca)
     CRYPTO="Certificate Authorities"
     ;;
-  -r )
+  -r)
     MAX_RETRY="$2"
     shift
     ;;
-  -d )
+  -d)
     CLI_DELAY="$2"
     shift
     ;;
-  -s )
+  -s)
     DATABASE="$2"
     shift
     ;;
-  -ccl )
+  -ccl)
     CC_SRC_LANGUAGE="$2"
     shift
     ;;
-  -ccn )
+  -ccn)
     CC_NAME="$2"
     shift
     ;;
-  -ccv )
+  -ccv)
     CC_VERSION="$2"
     shift
     ;;
-  -ccs )
+  -ccs)
     CC_SEQUENCE="$2"
     shift
     ;;
-  -ccp )
+  -ccp)
     CC_SRC_PATH="$2"
     shift
     ;;
-  -ccep )
+  -ccep)
     CC_END_POLICY="$2"
     shift
     ;;
-  -cccg )
+  -cccg)
     CC_COLL_CONFIG="$2"
     shift
     ;;
-  -cci )
+  -cci)
     CC_INIT_FCN="$2"
     shift
     ;;
-  -i )
+  -i)
     IMAGETAG="$2"
     shift
     ;;
-  -cai )
+  -cai)
     CA_IMAGETAG="$2"
     shift
     ;;
-  -verbose )
+  -verbose)
     VERBOSE=true
     shift
     ;;
-  * )
+  *)
     echo
     echo "Unknown flag: $key"
     echo
@@ -586,6 +647,8 @@ fi
 if [ "$MODE" == "up" ]; then
   echo "Starting nodes with CLI timeout of '${MAX_RETRY}' tries and CLI delay of '${CLI_DELAY}' seconds and using database '${DATABASE}' ${CRYPTO_MODE}"
   echo
+elif [ "${MODE}" == "resetAllData" ]; then
+  echo "Resetting wallets and fabric-ca-server dbs..."
 elif [ "$MODE" == "createChannel" ]; then
   echo "Creating channel '${CHANNEL_NAME}'."
   echo
@@ -600,13 +663,24 @@ elif [ "$MODE" == "restart" ]; then
 elif [ "$MODE" == "deployCC" ]; then
   echo "deploying chaincode on channel '${CHANNEL_NAME}'"
   echo
+elif [ "$MODE" == "startBlockchainExplorer" ]; then
+  echo "starting blockchain explorer at http://localhost:8080/ with username: exploreradmin and password: exploreradminpw"
+  echo
+elif [ "$MODE" == "stopBlockchainExplorer" ]; then
+  echo "stopping blockchain explorer"
+  echo
 else
   printHelp
   exit 1
 fi
 
+
+
 if [ "${MODE}" == "up" ]; then
   networkUp
+elif [ "${MODE}" == "resetAllData" ]; then
+  resetWallets
+  resetFabricCaServerDb
 elif [ "${MODE}" == "createChannel" ]; then
   createChannel
 elif [ "${MODE}" == "deployCC" ]; then
@@ -616,6 +690,10 @@ elif [ "${MODE}" == "down" ]; then
 elif [ "${MODE}" == "restart" ]; then
   networkDown
   networkUp
+elif [ "${MODE}" == "startBlockchainExplorer" ]; then
+  startBlockchainExplorer
+elif [ "${MODE}" == "stopBlockchainExplorer" ]; then
+  stopBlockchainExplorer
 else
   printHelp
   exit 1

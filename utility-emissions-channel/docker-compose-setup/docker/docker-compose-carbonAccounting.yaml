@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-version: '2'
+version: '2.1'
 
 volumes:
   orderer1.auditor1.carbonAccounting.com:
@@ -20,7 +20,7 @@ services:
 
   orderer1.auditor1.carbonAccounting.com:
     container_name: orderer1.auditor1.carbonAccounting.com
-    image: hyperledger/fabric-orderer:2.2.0
+    image: hyperledger/fabric-orderer:2.2.1
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -51,7 +51,7 @@ services:
 
   orderer1.auditor2.carbonAccounting.com:
     container_name: orderer1.auditor2.carbonAccounting.com
-    image: hyperledger/fabric-orderer:2.2.0
+    image: hyperledger/fabric-orderer:2.2.1
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -82,7 +82,7 @@ services:
 
   orderer1.auditor3.carbonAccounting.com:
     container_name: orderer1.auditor3.carbonAccounting.com
-    image: hyperledger/fabric-orderer:2.2.0
+    image: hyperledger/fabric-orderer:2.2.1
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -113,14 +113,14 @@ services:
 
   peer1.auditor1.carbonAccounting.com:
     container_name: peer1.auditor1.carbonAccounting.com
-    image: hyperledger/fabric-peer:2.2.0
+    image: hyperledger/fabric-peer:2.2.1
     environment:
       #Generic peer variables
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       # the following setting starts chaincode containers on the same
       # bridge network as the peers
       # https://docs.docker.com/compose/networking/
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_test
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_carbonAccounting
       - FABRIC_LOGGING_SPEC=INFO
       #- FABRIC_LOGGING_SPEC=DEBUG
       - CORE_PEER_TLS_ENABLED=true
@@ -151,14 +151,14 @@ services:
 
   peer1.auditor2.carbonAccounting.com:
     container_name: peer1.auditor2.carbonAccounting.com
-    image: hyperledger/fabric-peer:2.2.0
+    image: hyperledger/fabric-peer:2.2.1
     environment:
       #Generic peer variables
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       # the following setting starts chaincode containers on the same
       # bridge network as the peers
       # https://docs.docker.com/compose/networking/
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_test
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_carbonAccounting
       - FABRIC_LOGGING_SPEC=INFO
       #- FABRIC_LOGGING_SPEC=DEBUG
       - CORE_PEER_TLS_ENABLED=true
@@ -189,14 +189,14 @@ services:
 
   peer1.auditor3.carbonAccounting.com:
     container_name: peer1.auditor3.carbonAccounting.com
-    image: hyperledger/fabric-peer:2.2.0
+    image: hyperledger/fabric-peer:2.2.1
     environment:
       #Generic peer variables
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       # the following setting starts chaincode containers on the same
       # bridge network as the peers
       # https://docs.docker.com/compose/networking/
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_test
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_carbonAccounting
       - FABRIC_LOGGING_SPEC=INFO
       #- FABRIC_LOGGING_SPEC=DEBUG
       - CORE_PEER_TLS_ENABLED=true
